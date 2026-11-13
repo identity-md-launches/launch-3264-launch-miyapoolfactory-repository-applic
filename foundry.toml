@@ -1,0 +1,25 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+# Pinned compiler, same settings as the miyamints mainnet deployment.
+solc_version = "0.8.28"
+auto_detect_solc = false
+optimizer = true
+optimizer_runs = 100
+via_ir = true
+evm_version = "cancun"
+# No CBOR metadata hash, so a rebuild from this source matches the deployed bytecode exactly.
+bytecode_hash = "none"
+remappings = ["forge-std/=lib/forge-std/src/", "solady/=lib/solady/src/"]
+
+# `FOUNDRY_PROFILE=ci forge test`
+[profile.ci.fuzz]
+runs = 1000
+
+[profile.ci.invariant]
+runs = 10000
+
+[fmt]
+line_length = 120
