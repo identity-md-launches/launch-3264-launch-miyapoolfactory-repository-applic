@@ -20,7 +20,10 @@ against the vault's registry and minimum at creation.
 One contract on Ethereum mainnet: `MiyaPoolFactory`, constructor argument the live miyamints default alignment vault
 `0x34bE8C25C7922B3052D1955b8E63fB97F778AA08` (its `imd()` is IMD `0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7`, its
 `infer()` is INFER `0x53d0eA0A685220718Dc6a0a6e4617194C6F37921`). It replaces the v1 factory
-`0x05130d6B13961dc313cd2729Ae4Fd1C22b13efF3`, which has no pools.
+`0x05130d6B13961dc313cd2729Ae4Fd1C22b13efF3`, which has no pools. The constructor only stores the vault address (it
+makes no call, so it also deploys on a chain where the vault has no code); `imd()` and `infer()` read the vault when
+asked, and a pool with a nonzero fee can only be created once the vault exists at that address. Deployed through the
+IdentityMD launch factory; nothing is called after deployment. See `ADAPTATION.md` for the launch review.
 
 ## Build and test
 

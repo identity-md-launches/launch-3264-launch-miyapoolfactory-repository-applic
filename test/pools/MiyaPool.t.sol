@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
-import { ERC721 } from "solady/tokens/ERC721.sol";
-import { ERC1155 } from "solady/tokens/ERC1155.sol";
-import { ERC20 } from "solady/tokens/ERC20.sol";
-import { MiyaPool } from "../../src/pools/MiyaPool.sol";
-import { MiyaPoolFactory } from "../../src/pools/MiyaPoolFactory.sol";
+import {Test} from "forge-std/Test.sol";
+import {ERC721} from "solady/tokens/ERC721.sol";
+import {ERC1155} from "solady/tokens/ERC1155.sol";
+import {ERC20} from "solady/tokens/ERC20.sol";
+import {MiyaPool} from "../../src/pools/MiyaPool.sol";
+import {MiyaPoolFactory} from "../../src/pools/MiyaPoolFactory.sol";
 
 contract Mock721 is ERC721 {
     function name() public pure override returns (string memory) {
@@ -122,7 +122,7 @@ contract MockVault {
         minContribution[token] = m;
     }
 
-    function receiveContribution(address currency, uint256 amount, address benefactor) external payable {
+    function receiveContribution(address currency, uint256 amount, address benefactor) external payable virtual {
         require(!refuse, "vault refused");
         require(amount != 0, "AmountMustBePositive");
         require(benefactor != address(0), "InvalidAddress");
@@ -137,7 +137,7 @@ contract MockVault {
     }
 }
 
-contract NotAnNFT { }
+contract NotAnNFT {}
 
 contract MiyaPoolTest is Test {
     uint256 constant UNIT = 1e18;
@@ -220,7 +220,7 @@ contract MiyaPoolTest is Test {
         }
     }
 
-    function _none() internal pure returns (uint256[] memory r) { }
+    function _none() internal pure returns (uint256[] memory r) {}
 
     function _assertBacked(MiyaPool pool) internal view {
         assertEq(pool.totalSupply() + UNIT * pool.pendingUnits(), UNIT * pool.heldUnits(), "accounting");
@@ -242,7 +242,7 @@ contract MiyaPoolTest is Test {
         for (uint256 id = 1; id <= 20; ++id) {
             try nft.ownerOf(id) returns (address o) {
                 if (o == who) return id;
-            } catch { }
+            } catch {}
         }
         revert("none");
     }
@@ -323,9 +323,32 @@ contract MiyaPoolTest is Test {
         assertTrue(p.picksFree());
     }
 
-    function test_factory_rejectsVaultWithoutCode() public {
-        vm.expectRevert(MiyaPoolFactory.InvalidVault.selector);
-        new MiyaPoolFactory(makeAddr("eoa vault"));
+    /// The launch rehearses the constructor on an empty chain (no vault code), so it must not read the vault. A pool
+    /// with a fee still needs the vault to exist when it is created.
+    function test_factory_deploysWithAVaultWithoutCodeAndReadsItLazily() public {
+        address eoaVault = makeAddr("eoa vault");
+        MiyaPoolFactory f = new MiyaPoolFactory(eoaVault);
+        assertEq(f.vault(), eoaVault);
+        assertEq(f.imd(), address(0));
+        assertEq(f.infer(), address(0));
+        vm.expectRevert(MiyaPool.NoVault.selector);
+        f.createPool(address(nft), 1e18, 0);
+        vm.expectRevert(MiyaPool.NoVault.selector);
+        f.createPool(address(editions), 0, 3500e18);
+        MiyaPool p = MiyaPool(f.createPool(address(nft), 0, 0));
+        assertTrue(p.picksFree());
+        assertEq(p.vault(), eoaVault);
+        // once the vault exists at that address, the factory answers with its tokens and fee pools can be created
+        vm.etch(eoaVault, address(vault).code);
+        vm.store(eoaVault, bytes32(uint256(0)), bytes32(uint256(uint160(address(imd)))));
+        vm.store(eoaVault, bytes32(uint256(1)), bytes32(uint256(uint160(address(infer)))));
+        vm.store(eoaVault, keccak256(abi.encode(address(imd), uint256(2))), bytes32(uint256(1e18)));
+        vm.store(eoaVault, keccak256(abi.encode(address(imd), uint256(3))), bytes32(uint256(1)));
+        assertEq(f.imd(), address(imd));
+        assertEq(f.infer(), address(infer));
+        MiyaPool q = MiyaPool(f.createPool(address(editions), 1e18, 0));
+        assertEq(q.imd(), address(imd));
+        assertEq(q.imdFee(), 1e18);
     }
 
     function test_factory_detects1155() public {
@@ -1118,7 +1141,7 @@ contract MiyaPoolTest is Test {
         for (uint256 id = 1; id <= 20 && k < 2; ++id) {
             try nft.ownerOf(id) returns (address o) {
                 if (o == who) r[k++] = id;
-            } catch { }
+            } catch {}
         }
         require(k == 2, "expected two");
     }
@@ -1180,7 +1203,7 @@ contract MiyaPoolTest is Test {
         uint256 c1 = pool.commitRedeem(1, bob);
         vm.roll(block.number + 2);
 
-        pool.revealRedeem{ gas: 10_000_000 }(c0);
+        pool.revealRedeem{gas: 10_000_000}(c0);
         assertEq(pool.nextRevealId(), c1, "queue moved past the burner");
         pool.revealRedeem(c1);
         assertEq(n.balanceOf(bob), 1);
@@ -1204,7 +1227,7 @@ contract MiyaPoolTest is Test {
         vm.roll(block.number + 2);
 
         uint256 before = gasleft();
-        pool.revealRedeem{ gas: 16_777_216 }(c);
+        pool.revealRedeem{gas: 16_777_216}(c);
         emit log_named_uint("worst-case reveal gas", before - gasleft());
         assertEq(pool.nextRevealId(), c + 1);
         for (uint256 i; i < 50; ++i) {
@@ -1220,7 +1243,7 @@ contract MiyaPoolTest is Test {
         vm.stopPrank();
         vm.roll(block.number + 2);
         vm.expectRevert(MiyaPool.RevealGasTooLow.selector);
-        pool.revealRedeem{ gas: 200_000 }(c);
+        pool.revealRedeem{gas: 200_000}(c);
         assertEq(pool.escrowedTo(1), address(0));
     }
 
@@ -1304,14 +1327,14 @@ contract Notify721 is Mock721 {
     function transferFrom(address from, address to, uint256 id) public payable override {
         super.transferFrom(from, to, id);
         if (to.code.length != 0) {
-            try GasBurner(payable(to)).onNotify() { } catch { }
+            try GasBurner(payable(to)).onNotify() {} catch {}
         }
     }
 }
 
 contract GasBurner {
     function onNotify() external pure {
-        while (true) { }
+        while (true) {}
     }
 }
 

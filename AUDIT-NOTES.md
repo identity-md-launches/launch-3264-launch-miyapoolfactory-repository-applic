@@ -17,8 +17,9 @@ dropped by the owner before review.)
 piece on either path.
 
 **Pick fee.** `createPool(collection, imdFee, inferFee)`: per piece, token wei; 0 = that token not offered; both 0 = free
-picks. The pool reads the vault, IMD and INFER from the factory (the factory reads `vault.imd()` / `vault.infer()` at
-construction) and, at creation, requires each nonzero fee's token to be a registry payment token
+picks. The pool reads the vault, IMD and INFER from the factory (the factory reads `vault.imd()` / `vault.infer()` live
+when a pool is created; since the launch review of 2026-11-13 its constructor stores the vault address without reading
+it, so it deploys on a chain where the vault has no code, see ADAPTATION.md) and, at creation, requires each nonzero fee's token to be a registry payment token
 (`vault.registry().isPaymentToken`) and the fee to be at least `vault.config().minContribution(token)` (mainnet today:
 1 IMD, 3,500 INFER). Fixed forever. `redeem(ids, amounts, to, feeToken)`: burns 1e18 per piece, then (state already
 updated) pulls `fee × pieces` of `feeToken` from the picker, checks the pool's balance grew by exactly that (no
@@ -42,8 +43,16 @@ Consequences the owner accepted or should know:
   revealed until 2 blocks after it is sent. So anyone can front-run a pick with `commitRedeem(1)` (cost: 1 pool token,
   returned as an NFT, plus gas) to make it revert `LockedForRandomRedeem`, and a bot committing every block can keep
   picks on existing inventory blocked. Busy random traffic has the same effect. The app leaves locked ids out of picks.
+  **Addition (launch review 2026-11-13):** the lock lasts until someone sends the reveal, and the committer need not:
+  a 50-piece commit (about 143k gas) forces whoever wants to pick to pay a reveal of up to 50 transfers (about 1.9M gas
+  with a plain collection, up to about 10M if every transfer burns its 200k cap). The app's reveal bot should reveal as
+  soon as a target block is mined. See ADAPTATION.md (`c2cfa51a`).
 - Anyone can create a collection's pool first and fix its fees for everyone (squatting). An absurd fee makes picks
-  impossible in practice; random redeems still work.
+  impossible in practice; random redeems still work for ERC-721 pools off chain 4663. **Correction (launch review
+  2026-11-13):** ERC-1155 pools and every pool on chain 4663 have no random path, so a squatted pool there with an
+  unpayable fee accepts deposits and can never release a unit, and the collection can never get another pool. See
+  ADAPTATION.md (`4e9dcd9a`): not changed in the contracts, since the only fix is a fee ceiling, which is a fee rule for
+  the owner to set; the app should not list or deposit into such pools.
 - A pick now costs the vault's contribution path: about 430-540k gas on the live vault (fork), against ~80-90k for a v1
   targeted redeem. Free picks don't touch the vault.
 - Random is free and picks cost a fee, so re-rolling random redeems (deposit, commit, reveal) to fish for a piece costs
