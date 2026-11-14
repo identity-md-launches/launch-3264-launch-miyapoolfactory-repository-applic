@@ -1,0 +1,12 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "MiyaPoolFactory",
+      "constructorArgs": [
+        "0x34be8c25c7922b3052d1955b8e63fb97f778aa08"
+      ]
+    }
+  ],
+  "notes": "MiyaPoolFactory (src/pools/MiyaPoolFactory.sol) is the only contract deployed. Its single constructor argument is the live miyamints default alignment vault on Ethereum mainnet, 0x34be8c25c7922b3052d1955b8e63fb97f778aa08, whose imd() is IMD 0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7 and whose infer() is INFER 0x53d0ea0a685220718dc6a0a6e4617194c6f37921. The constructor only stores the vault address; imd() and infer() are read from the vault when a pool is created (see ADAPTATION.md change 1), so the constructor succeeds on the rehearsal chain and the factory binds to the live vault on mainnet. The factory is ownerless and has no owner, admin, pause, setter or fee recipient, so no $owner argument exists. No MiyaPool is deployed by the launch: anyone calls createPool(collection, imdFee, inferFee) and the factory deploys one pool per collection by CREATE2 (salt keccak256(collection)); a second pool for the same collection reverts PoolExists. Nothing is called after deployment and no ETH is sent. Economics, as numbers: the factory and pools take no fee of their own. Deposit costs nothing and mints 1e18 pool tokens per NFT or ERC-1155 unit. A random redeem burns exactly 1e18 per NFT and pays nothing else. A pick burns 1e18 per NFT and pays the pool's pick fee per NFT, pulled from the picker and forwarded in full to the vault via receiveContribution(token, fee, picker) as the picker's contribution; the pool keeps nothing. Each pool's pick fee per token (IMD and/or INFER) is set once by the pool's creator: 0 (not offered in that token) or at least the vault's minimum contribution at creation (today 1 IMD = 1e18 and 3,500 INFER = 3500e18), and never changes. Random redeems are enabled for ERC-721 pools except on chain id 4663; this launch is Ethereum mainnet (chain id 1) only. Accepted risks are listed in AUDIT-NOTES.md and ADAPTATION.md."
+}
