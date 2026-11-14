@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/Test.sol";
-import { MiyaPool } from "../../src/pools/MiyaPool.sol";
-import { MiyaPoolFactory } from "../../src/pools/MiyaPoolFactory.sol";
+import {Test} from "forge-std/Test.sol";
+import {MiyaPool} from "../../src/pools/MiyaPool.sol";
+import {MiyaPoolFactory} from "../../src/pools/MiyaPoolFactory.sol";
 
 interface IDrop {
     function totalSupply() external view returns (uint256);
@@ -32,8 +32,8 @@ interface IVaultView {
 ///         exercising random redeems, picks paying the fee in IMD and in INFER into the LIVE default alignment vault
 ///         (deployments/1.json defaultVault, booked to the picker), and the lock between them. No change to the vault or
 ///         registry: the fees are the live vault's minimum contributions, read on chain.
-///         RPC: MAINNET_RPC_URL (default https://ethereum-rpc.publicnode.com); FORK_BLOCK pins a block.
-///         Skipped (not failed) when the RPC is unreachable or SKIP_FORK_TESTS=true; REQUIRE_FORK_TESTS=true fails instead.
+///         Forks MAINNET_RPC_URL at the assignment's fixed block. Skips only when that variable is empty;
+///         a configured but failing RPC fails the test, including when REQUIRE_FORK_TESTS=true.
 contract MiyaPoolV2ForkTest is Test {
     address constant DROP = 0xB86B68BCa287AFD48F81D1F792db69368664a120;
     address constant DEFAULT_VAULT = 0x34bE8C25C7922B3052D1955b8E63fB97F778AA08;
@@ -43,30 +43,24 @@ contract MiyaPoolV2ForkTest is Test {
     uint256 IMD_FEE;
     uint256 INFER_FEE;
 
-    bool forked;
     MiyaPoolFactory factory;
     MiyaPool pool;
     address trader = makeAddr("trader");
     uint256[] deposited;
 
     function setUp() public {
-        if (vm.envOr("SKIP_FORK_TESTS", false)) return;
-        string memory rpc = vm.envOr("MAINNET_RPC_URL", string("https://ethereum-rpc.publicnode.com"));
-        uint256 blockNo = vm.envOr("FORK_BLOCK", uint256(0));
-        if (blockNo == 0) {
-            try vm.createSelectFork(rpc) {
-                forked = true;
-            } catch { }
-        } else {
-            try vm.createSelectFork(rpc, blockNo) {
-                forked = true;
-            } catch { }
-        }
-        if (!forked) {
-            require(!vm.envOr("REQUIRE_FORK_TESTS", false), "fork tests required but no mainnet fork");
+        string memory rpc = vm.envOr("MAINNET_RPC_URL", string(""));
+        if (bytes(rpc).length == 0) {
+            vm.skip(true);
             return;
         }
+        vm.createSelectFork(rpc, 26_409_294);
+        assertEq(block.number, 26_409_294);
+        assertEq(block.chainid, 1);
+        assertGt(DEFAULT_VAULT.code.length, 0);
         factory = new MiyaPoolFactory(DEFAULT_VAULT);
+        assertEq(factory.imd(), IMD);
+        assertEq(factory.infer(), INFER);
         address cfg = IVaultCfg(DEFAULT_VAULT).config();
         IMD_FEE = IVaultCfg(cfg).minContribution(IMD);
         INFER_FEE = IVaultCfg(cfg).minContribution(INFER);
@@ -90,13 +84,12 @@ contract MiyaPoolV2ForkTest is Test {
             one[0] = id;
             try pool.deposit(one, new uint256[](0), trader) {
                 deposited.push(id);
-            } catch { }
+            } catch {}
             vm.stopPrank();
         }
     }
 
     function test_fork_bothRedeemPathsAndPickFeesIntoTheLiveVault() public {
-        vm.skip(!forked);
         uint256 n = deposited.length;
         assertGe(n, 7, "need at least 7 real pieces deposited");
         emit log_named_uint("pieces deposited by real holders", n);
